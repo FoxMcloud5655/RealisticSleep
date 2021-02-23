@@ -6,7 +6,9 @@ import com.google.common.base.Splitter;
 
 import net.minecraft.tileentity.TileEntity;
 import net.minecraftforge.common.ForgeConfigSpec;
+import net.minecraftforge.common.ForgeConfigSpec.BooleanValue;
 import net.minecraftforge.common.ForgeConfigSpec.ConfigValue;
+import net.minecraftforge.common.ForgeConfigSpec.DoubleValue;
 import net.minecraftforge.common.ForgeConfigSpec.IntValue;
 import net.minecraftforge.common.ForgeConfigSpec.LongValue;
 
@@ -15,18 +17,41 @@ public class RealisticSleepConfig {
 	private ForgeConfigSpec spec;
 	private IntValue method;
 	private LongValue waitTime;
+	private LongValue minTime;
+	private BooleanValue healPlayers;
+	private IntValue healCost;
+	private DoubleValue hungerPerHour;
+	private IntValue hungerLimit;
 	private ConfigValue<String> blacklist;
 
 	public RealisticSleepConfig() {
 		final ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
 		builder.comment("Defines what method of tick simulation to perform.  The default is 1.\n"
 				+ "  1 - Search and Tick (speed over precision)\n"
-				+ "  2 - Full World Tick (precision over speed)");
+				+ "  2 - World Tick (precision over speed)");
+				//+ "  3 - Full Server Tick (overkill; for single-player worlds or mostly vanilla servers only)");
 		this.method = builder.defineInRange("method", 1, 1, 2);
-		builder.comment("Waiting time before players are allowed to sleep again and skip time in seconds.");
-		this.waitTime = builder.defineInRange("waitTime", 250L, 5L, 600L);
-		builder.comment("A blacklist of what TileEntities that the loaded chunks method (method 1) will skip.");
+		builder.comment("A blacklist of what TileEntities that the Search and Tick method (method 1) will skip.");
 		this.blacklist = builder.define("blacklist", "minecraft:chest,minecraft:mob_spawner,quark:monster_box,mana-and-artifice:magelight,iceandfire:ghost_chest,minecraft:skull,mana-and-artifice:inscription_table_tile_entity,iceandfire:iaf_lectern,computercraft:speaker,computercraft:computer_advanced,computercraft:computer,mana-and-artifice:slipstream_generator,minecraft:trapped_chest");
+		
+		builder.comment("Waiting time before players are allowed to sleep again and skip time in seconds.");
+		this.waitTime = builder.defineInRange("waitTime", 250L, 5L, 1200L);
+		builder.comment("The minimum amount of time in seconds that must be skipped before it's considered for extra tick processing.");
+		this.minTime = builder.defineInRange("minTime", 10L, 1L, 1200L);
+		
+		builder.comment("Defines if players that are sleeping are healed (if their hunger allows it) after waking up.");
+		this.healPlayers = builder.define("healPlayers", true);
+		builder.comment("Defines how much hunger it costs to heal 1/2 a heart (1 HP) if the above option is enabled.");
+		this.healCost = builder.defineInRange("healCost", 2, 0, 10);
+		
+		builder.comment("Defines the amount of hunger that is taken away per minecraft hour slept (1000 ticks).\n"
+				+ "This is a minimum value.  For example, if it took 4 hunger to heal while this amount was 10, it would use 10 hunger.\n"
+				+ "However, if it took 14 to heal while this amount was 10, then the player would use 14 hunger.\n"
+				+ "The maximum hours a player can normally sleep through the night is roughly 11.35.");
+		this.hungerPerHour = builder.defineInRange("hungerPerHour", 1.0D, 0.0D, 4.0D);
+		builder.comment("Defines the minimum amount of hunger that is always preserved so the player doesn't start dying of starvation upon waking up.");
+		this.hungerLimit = builder.defineInRange("hungerLimit", 6, 0, 20);
+		
 		this.spec = builder.build();
 	}
 
@@ -38,10 +63,6 @@ public class RealisticSleepConfig {
 		return this.method.get();
 	}
 	
-	public boolean canSleep(long ticksElapsed) {
-		return ticksElapsed >= this.waitTime.get() * 20L;
-	}
-
 	public boolean tileEntityNotInBlacklist(TileEntity tileEntity) {
 		List<String> entries = Splitter.on(',').omitEmptyStrings().splitToList(this.blacklist.get());
 		for (int i = 0; i < entries.size(); i++) {
@@ -49,5 +70,29 @@ public class RealisticSleepConfig {
 				return false;
 		}
 		return true;
+	}
+	
+	public boolean canSleep(long ticksElapsed) {
+		return ticksElapsed >= this.waitTime.get() * 20L;
+	}
+	
+	public boolean isTimeSkip(long ticksSkipped) {
+		return ticksSkipped > (this.minTime.get() * 20L);
+	}
+	
+	public boolean canHeal() {
+		return this.healPlayers.get();
+	}
+	
+	public float hungerDrainedToHeal() {
+		return this.healCost.get();
+	}
+	
+	public float minHungerDrained(long ticksElapsed) {
+		return (float)((ticksElapsed / 1000D) * this.hungerPerHour.get());
+	}
+	
+	public int hungerLimit() {
+		return this.hungerLimit.get();
 	}
 }
