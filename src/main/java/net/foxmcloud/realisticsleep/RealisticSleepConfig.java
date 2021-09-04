@@ -16,6 +16,8 @@ public class RealisticSleepConfig {
 
 	private ForgeConfigSpec spec;
 	private IntValue method;
+	private IntValue maxTicksToSkip;
+	private IntValue maxTicksToWait;
 	private LongValue waitTime;
 	private LongValue minTime;
 	private BooleanValue healPlayers;
@@ -27,10 +29,19 @@ public class RealisticSleepConfig {
 	public RealisticSleepConfig() {
 		final ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
 		builder.comment("Defines what method of tick simulation to perform.  The default is 1.\n"
-				+ "  1 - Search and Tick (speed over precision)\n"
-				+ "  2 - World Tick (precision over speed)");
-				//+ "  3 - Full Server Tick (overkill; for single-player worlds or mostly vanilla servers only)");
-		this.method = builder.defineInRange("method", 1, 1, 2);
+				+ "  1 - Search and Tick - Speed over precision, retains vanilla behavior, best for large modpacks.\n"
+				+ "  2 - World Tick - Precision over speed, retains vanilla behavior, best for medium modpacks.\n"
+				+ "  3 - Full Server Tick - Extreme precision, quickly progress the night, works with all sizes of modpacks but is slow.");
+		this.method = builder.defineInRange("method", 3, 1, 3);
+		
+		builder.comment("Defines how many ticks to skip forward per tick when using the Full Server Tick method.\n"
+				+ "Must be in increments of 4 (preferrably in increments of 20).");
+		this.maxTicksToSkip = builder.defineInRange("maxTicksToSkip", 40, 4, 100);
+		
+		builder.comment("Defines how many ticks to wait per tick when using the Full Server Tick method.\n"
+				+ "A value of 2 would perform the skip every other tick (not recommended) and a value of 4 will perform a skip every 4th tick.");
+		this.maxTicksToWait = builder.defineInRange("maxTicksToWait", 2, 1, 8);
+		
 		builder.comment("A blacklist of what TileEntities that the Search and Tick method (method 1) will skip.");
 		this.blacklist = builder.define("blacklist", "minecraft:chest,minecraft:mob_spawner,quark:monster_box,mana-and-artifice:magelight,iceandfire:ghost_chest,minecraft:skull,mana-and-artifice:inscription_table_tile_entity,iceandfire:iaf_lectern,computercraft:speaker,computercraft:computer_advanced,computercraft:computer,mana-and-artifice:slipstream_generator,minecraft:trapped_chest");
 		
@@ -61,6 +72,14 @@ public class RealisticSleepConfig {
 	
 	public int getSimulationMethod() {
 		return this.method.get();
+	}
+	
+	public int getMaxTicksToSkip() {
+		return this.maxTicksToSkip.get();
+	}
+	
+	public int getMaxTicksToWait() {
+		return this.maxTicksToWait.get();
 	}
 	
 	public boolean tileEntityNotInBlacklist(TileEntity tileEntity) {
@@ -94,5 +113,9 @@ public class RealisticSleepConfig {
 	
 	public int hungerLimit() {
 		return this.hungerLimit.get();
+	}
+	
+	public boolean isFullTick() {
+		return this.method.get() == 3;
 	}
 }
