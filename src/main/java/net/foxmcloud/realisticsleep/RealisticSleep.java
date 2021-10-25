@@ -207,7 +207,7 @@ public class RealisticSleep
 				}
 			}
 			if (config.isFullTick() && allPlayersSleeping) {
-				world.setDayTime(previousDayTime + (getTicksToSkip(world, previousClientDayTime) / config.getMaxTicksToWait()));
+				world.setDayTime(previousClientDayTime + (getTicksToSkip(world, previousClientDayTime) / config.getMaxTicksToWait()));
 			}
 			previousClientDayTime = world.getDayTime();
 		}
