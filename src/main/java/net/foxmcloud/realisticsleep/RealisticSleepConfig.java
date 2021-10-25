@@ -28,7 +28,7 @@ public class RealisticSleepConfig {
 
 	public RealisticSleepConfig() {
 		final ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
-		builder.comment("Defines what method of tick simulation to perform.  The default is 1.\n"
+		builder.comment("Defines what method of tick simulation to perform.  The default is 3.\n"
 				+ "  1 - Search and Tick - Speed over precision, retains vanilla behavior, best for large modpacks.\n"
 				+ "  2 - World Tick - Precision over speed, retains vanilla behavior, best for medium modpacks.\n"
 				+ "  3 - Full Server Tick - Extreme precision, quickly progress the night, works with all sizes of modpacks but is slow.");
