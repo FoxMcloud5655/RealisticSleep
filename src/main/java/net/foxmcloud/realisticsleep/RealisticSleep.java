@@ -101,7 +101,7 @@ public class RealisticSleep
 		boolean arePlayersSleeping = false;
 		boolean areAllPlayersSleeping = true;
 		for (int i = 0; i < players.size(); i++) {
-			if (players.get(i).getSleepTimer() >= 95) {
+			if (players.get(i).getSleepTimer() > 95) {
 				arePlayersSleeping = true;
 			}
 			else {
@@ -122,7 +122,7 @@ public class RealisticSleep
 				Field sleepTimer = playerClass.getDeclaredField("sleepTimer");
 				sleepTimer.setAccessible(true);
 				for (int i = 0; i < players.size(); i++) {
-					if (players.get(i).getSleepTimer() >= 95) {
+					if (sleepTimer.getInt(players.get(i)) > 95) {
 						sleepTimer.setInt(players.get(i), 95);
 					}
 				}
