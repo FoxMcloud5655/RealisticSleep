@@ -213,6 +213,7 @@ public class RealisticSleep
 		}
 	}
 	
+	@SuppressWarnings("unused")
 	private long getTicksToSkip(World world, long previousTime) {
 		long ticksSkipped = world.getDayTime() < previousTime ? 24000 : 0 + world.getDayTime() - previousTime;
 		long ticksToSkip = config.isTimeSkip(ticksSkipped) ? ticksSkipped : 24000 - world.getDayTime();
