@@ -89,7 +89,7 @@ public class RealisticSleep
 	@SubscribeEvent
 	public void onServerTick(WorldTickEvent event) {
 		// If we aren't in the Overworld or if we're giving the server a break from skipping, just do nothing.
-		if (event.world.getDimensionKey() != event.world.OVERWORLD || event.world.getGameTime() % config.getMaxTicksToWait() != 0 || currentlySkipping || event.world.getPlayers().size() == 0) {
+		if (event.world.getDimensionKey() != event.world.OVERWORLD || event.world.isRemote || event.world.getGameTime() % config.getMaxTicksToWait() != 0 || currentlySkipping || event.world.getPlayers().size() == 0) {
 			return;
 		}
 		
