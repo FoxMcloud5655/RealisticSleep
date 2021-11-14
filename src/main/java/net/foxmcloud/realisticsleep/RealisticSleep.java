@@ -117,7 +117,7 @@ public class RealisticSleep
 			}
 		}
 		else if (arePlayersSleeping) {
-			Class<?> playerClass = PlayerEntity.class;
+			Class<?> playerClass = ServerPlayerEntity.class.getSuperclass();
 			try {
 				Field sleepTimer = playerClass.getDeclaredField("sleepTimer");
 				sleepTimer.setAccessible(true);
@@ -128,7 +128,7 @@ public class RealisticSleep
 				}
 			}
 			catch (Exception e) {
-				logError("Exception occurred while accessing sleepTimer for PlayerEntity: " + e.getMessage());
+				logError("Exception occurred while accessing " + e.getMessage() + " for " + playerClass.getName() + ".");
 				return;
 			}
 		}
