@@ -9,8 +9,14 @@ import java.util.List;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+
 import net.minecraft.client.entity.player.AbstractClientPlayerEntity;
 import net.minecraft.client.world.ClientWorld;
+import net.minecraft.command.CommandSource;
+import net.minecraft.command.Commands;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.ServerPlayerEntity;
 import net.minecraft.potion.EffectInstance;
@@ -28,6 +34,7 @@ import net.minecraft.world.storage.ServerWorldInfo;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent.PlayerTickEvent;
 import net.minecraftforge.event.TickEvent.WorldTickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -54,6 +61,7 @@ public class RealisticSleep
 	public static final boolean DEBUG = false;
 	public static final Method getLoadedChunksMethod;
 	public static final Method tickBlockEntitiesMethod;
+	public static final Field sleepTimerField;
 	private final RealisticSleepConfig config = new RealisticSleepConfig();
 	
 	public long lastSleepTicks = 0;
@@ -83,6 +91,14 @@ public class RealisticSleep
 		else {
 			logInfo("World reflection successful.");
 			tickBlockEntitiesMethod.setAccessible(true);
+		}
+		if (sleepTimerField == null) {
+			logError("Sleep Timer reflection unsuccessful.  Method 3 will not work.");
+			return;
+		}
+		else {
+			logInfo("Sleep Timer reflection successful.");
+			sleepTimerField.setAccessible(true);
 		}
 	}
 
@@ -117,18 +133,15 @@ public class RealisticSleep
 			}
 		}
 		else if (arePlayersSleeping) {
-			Class<?> playerClass = ServerPlayerEntity.class.getSuperclass();
 			try {
-				Field sleepTimer = playerClass.getDeclaredField("sleepTimer");
-				sleepTimer.setAccessible(true);
 				for (int i = 0; i < players.size(); i++) {
-					if (sleepTimer.getInt(players.get(i)) > 95) {
-						sleepTimer.setInt(players.get(i), 95);
+					if (sleepTimerField.getInt(players.get(i)) > 95) {
+						sleepTimerField.setInt(players.get(i), 95);
 					}
 				}
 			}
 			catch (Exception e) {
-				logError("Exception occurred while accessing " + e.getMessage() + " for " + playerClass.getName() + ".");
+				logError("Exception occurred while accessing " + e.getMessage() + ".");
 				return;
 			}
 		}
@@ -222,7 +235,7 @@ public class RealisticSleep
 	}
 
 	private void tickTileEntities(int ticksToSimulate, World world) {
-		if (getLoadedChunksMethod != null) { // TODO: Test NOT using reflection.
+		if (getLoadedChunksMethod != null) {
 			ArrayList<ITickableTileEntity> tileEntities = new ArrayList<ITickableTileEntity>();
 			ServerChunkProvider chunkProvider = (ServerChunkProvider)world.getChunkProvider();
 			try {
@@ -308,6 +321,44 @@ public class RealisticSleep
 		}
 		player.heal(healthToHeal - (hunger / hungerToHealthRatio));
 	}
+	
+	@SubscribeEvent
+	public void registerCommandsEvent(RegisterCommandsEvent event) {
+		registerCommand(event.getDispatcher());
+	}
+	
+    public void registerCommand(CommandDispatcher<CommandSource> dispatcher) {
+        dispatcher.register(
+                Commands.literal("realisticsleep")
+                        .then(Commands.literal("dumpPlayerEntityFields")
+                                .executes(ctx -> dumpPlayerEntityFields(ctx.getSource()))
+                        )
+                        .then(Commands.literal("hasSleepTimer")
+                        		.executes(ctx -> hasSleepTimer(ctx.getSource()))
+                        )
+                        .executes(ctx -> versionOfMod(ctx.getSource()))
+        );
+    }
+
+	private int dumpPlayerEntityFields(CommandSource source) {
+		Field[] playerFields = ServerPlayerEntity.class.getSuperclass().getDeclaredFields();
+		String fieldNames = "";
+		for (int i = 0; i < playerFields.length; i++) {
+			fieldNames += playerFields[i].getName() + (i < playerFields.length - 1 ? "\n" : "");
+		}
+		source.sendFeedback(new StringTextComponent(fieldNames), DEBUG);
+		return 0;
+	}
+	
+	private int hasSleepTimer(CommandSource source) {
+		source.sendFeedback(new StringTextComponent(Boolean.toString(sleepTimerField != null)), DEBUG);
+		return 0;
+	}
+	
+	private int versionOfMod(CommandSource source) {
+		source.sendFeedback(new StringTextComponent("Realistic Sleep is using method " + config.getSimulationMethod() + "and is on version " + VERSION + "."), true);
+		return 0;
+	}
 
 	private static void logInfo(String message) {
 		LOGGER.info("[" + RealisticSleep.MODID_PROPER + "] " + message);
@@ -334,9 +385,19 @@ public class RealisticSleep
 			return null;
 		}
 	}
+	
+	private static Field fetchSleepTimerField() {
+		try {
+			return ObfuscationReflectionHelper.findField(PlayerEntity.class, "field_71076_b");
+		} catch (Exception e) {
+			logError("Exception occurred while accessing sleepTimer: " + e.getMessage());
+			return null;
+		}
+	}
 
 	static {
 		getLoadedChunksMethod = fetchGetLoadedChunksMethod();
 		tickBlockEntitiesMethod = fetchTickBlockEntitiesMethod();
+		sleepTimerField = fetchSleepTimerField();
 	}
 }
