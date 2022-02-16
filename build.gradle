@@ -3,11 +3,9 @@ buildscript {
         mavenLocal()
         jcenter()
         maven { url = "http://files.minecraftforge.net/maven" }
-        //maven { url = "https://repo.spongepowered.org/maven" }
     }
     dependencies {
-        classpath 'net.minecraftforge.gradle:ForgeGradle:3.+'
-        //classpath 'org.spongepowered:mixingradle:0.7-SNAPSHOT'
+        classpath 'net.minecraftforge.gradle:ForgeGradle:4.1.+'
     }
 }
 
@@ -17,7 +15,6 @@ plugins {
 
 apply plugin: 'net.minecraftforge.gradle'
 apply plugin: 'eclipse'
-//apply plugin: "org.spongepowered.mixin"
 
 group = "net.foxmcloud.realisticsleep"
 archivesBaseName = "RealisticSleep"
@@ -36,10 +33,10 @@ file('build.properties').withReader {
 config.mod_version = "${config.mod_version}.${config.build_number}"
 version = "${config.mc_version}-${config.mod_version}"
 println "Starting build of ${archivesBaseName}, Version: ${config.mod_version}"
-println "Using Forge: ${config.forge_version}, for Minecraft: ${config.mc_version}, with Mappings: ${config.mappings}"
+println "Using Forge: ${config.forge_version}, for Minecraft: ${config.mc_version}, with official mappings"
 
 minecraft {
-    mappings channel: 'snapshot', version: config.mappings
+    mappings channel: 'official', version: config.mc_version
     accessTransformer = file("src/main/resources/META-INF/accesstransformer.cfg")
     runs {
         client {
