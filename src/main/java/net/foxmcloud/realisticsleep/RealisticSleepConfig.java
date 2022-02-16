@@ -4,7 +4,7 @@ import java.util.List;
 
 import com.google.common.base.Splitter;
 
-import net.minecraft.tileentity.TileEntity;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraftforge.common.ForgeConfigSpec;
 import net.minecraftforge.common.ForgeConfigSpec.BooleanValue;
 import net.minecraftforge.common.ForgeConfigSpec.ConfigValue;
@@ -29,10 +29,10 @@ public class RealisticSleepConfig {
 	public RealisticSleepConfig() {
 		final ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
 		builder.comment("Defines what method of tick simulation to perform.  The default is 3.\n"
-				+ "  1 - Search and Tick - Speed over precision, retains vanilla behavior, best for large modpacks.\n"
+				+ "  1 - Search and Tick - Speed over precision, retains vanilla behavior, best for large modpacks.  WARNING: Currently not working; disabled for now.\n"
 				+ "  2 - World Tick - Precision over speed, retains vanilla behavior, best for medium modpacks.\n"
 				+ "  3 - Full Server Tick - Extreme precision, quickly progress the night, works with all sizes of modpacks but is slow.");
-		this.method = builder.defineInRange("method", 3, 1, 3);
+		this.method = builder.defineInRange("method", 3, 2, 3);
 		
 		builder.comment("Defines how many ticks to skip forward per tick when using the Full Server Tick method.\n"
 				+ "Must be in increments of 4 (preferrably in increments of 20).");
@@ -82,7 +82,7 @@ public class RealisticSleepConfig {
 		return this.maxTicksToWait.get();
 	}
 	
-	public boolean tileEntityNotInBlacklist(TileEntity tileEntity) {
+	public boolean tileEntityNotInBlacklist(BlockEntity tileEntity) {
 		List<String> entries = Splitter.on(',').omitEmptyStrings().splitToList(this.blacklist.get());
 		for (int i = 0; i < entries.size(); i++) {
 			if (tileEntity.getType().getRegistryName().toString().equalsIgnoreCase(entries.get(i)))

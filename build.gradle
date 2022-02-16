@@ -2,10 +2,10 @@ buildscript {
     repositories {
         mavenLocal()
         jcenter()
-        maven { url = "http://files.minecraftforge.net/maven" }
+        maven { url = "https://files.minecraftforge.net/maven" }
     }
     dependencies {
-        classpath 'net.minecraftforge.gradle:ForgeGradle:4.1.+'
+        classpath 'net.minecraftforge.gradle:ForgeGradle:5.1.+'
     }
 }
 
@@ -19,7 +19,7 @@ apply plugin: 'eclipse'
 group = "net.foxmcloud.realisticsleep"
 archivesBaseName = "RealisticSleep"
 
-sourceCompatibility = targetCompatibility = compileJava.sourceCompatibility = compileJava.targetCompatibility = '1.8'
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
 //Add generated resources to main resources.
 sourceSets.main.resources.srcDirs += "src/generated/resources"
@@ -55,30 +55,12 @@ minecraft {
     }
 }
 
-//mixin {
-//    add (sourceSets.main, "mixins.realisticsleep.refmap.json")
-//}
-
 repositories {
     mavenLocal()
 }
 
 dependencies {
     minecraft "net.minecraftforge:forge:${config.mc_version}-${config.forge_version}"
-    //annotationProcessor("org.spongepowered:mixin:0.8.2:processor")
-}
-
-processResources { task ->
-    inputs.property 'mod_version', config.mod_version
-    inputs.property 'mc_version', config.mc_version
-
-    from(sourceSets.main.resources.srcDirs) { spec ->
-        spec.include 'META-INF/mods.toml'
-        task.doFirst {
-            spec.expand 'version': config.mod_version,
-                    'mc_version': config.mc_version
-        }
-    }
 }
 
 jar {
