@@ -5,6 +5,7 @@ import java.util.List;
 import com.google.common.base.Splitter;
 
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraftforge.common.ForgeConfigSpec;
 import net.minecraftforge.common.ForgeConfigSpec.BooleanValue;
 import net.minecraftforge.common.ForgeConfigSpec.ConfigValue;
@@ -85,7 +86,7 @@ public class RealisticSleepConfig {
 	public boolean tileEntityNotInBlacklist(BlockEntity tileEntity) {
 		List<String> entries = Splitter.on(',').omitEmptyStrings().splitToList(this.blacklist.get());
 		for (int i = 0; i < entries.size(); i++) {
-			if (tileEntity.getType().getRegistryName().toString().equalsIgnoreCase(entries.get(i)))
+			if (BlockEntityType.getKey(tileEntity.getType()).toString().equalsIgnoreCase(entries.get(i)))
 				return false;
 		}
 		return true;

@@ -18,7 +18,8 @@ import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.commands.CommandSource;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
-import net.minecraft.network.chat.TextComponent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ChunkHolder;
 import net.minecraft.server.level.ChunkMap;
 import net.minecraft.server.level.ServerLevel;
@@ -28,6 +29,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.food.FoodData;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.entity.TickingBlockEntity;
 import net.minecraft.world.level.chunk.ChunkSource;
 import net.minecraft.world.level.chunk.LevelChunk;
@@ -152,7 +154,7 @@ public class RealisticSleep {
 				players.forEach(player -> {
 					if (player.getSleepTimer() > 0) {
 						player.stopSleeping();
-						player.displayClientMessage(new TextComponent("You're not that tired after recently sleeping."), true);
+						player.displayClientMessage(Component.literal("You're not that tired after recently sleeping."), true);
 					}
 				});
 				((ServerLevelData)event.world.getLevelData()).setDayTime(previousDayTime);
@@ -175,7 +177,7 @@ public class RealisticSleep {
 				break;
 			}
 			players.forEach(player -> {
-				player.displayClientMessage(new TextComponent("Time passes as everyone sleeps..."), true);
+				player.displayClientMessage(Component.literal("Time passes as everyone sleeps..."), true);
 			});
 			for (int i = 0; i < players.size(); i++) {
 				ServerPlayer player = (ServerPlayer) players.get(i);
@@ -244,7 +246,7 @@ public class RealisticSleep {
 					chunk.getBlockEntitiesPos().forEach(tileEntityPos -> {
 						BlockEntity tileEntity = chunk.getBlockEntity(tileEntityPos);
 						if (tileEntity instanceof TickingBlockEntity && config.tileEntityNotInBlacklist(tileEntity)) {
-							if (DEBUG) logInfo("Found BlockEntity " + tileEntity.getType().getRegistryName() + " to update.");
+							if (DEBUG) logInfo("Found BlockEntity " + BlockEntityType.getKey(tileEntity.getType()) + " to update.");
 							tileEntities.add((TickingBlockEntity)tileEntity);
 						}
 					});
@@ -344,17 +346,17 @@ public class RealisticSleep {
 		for (int i = 0; i < playerFields.length; i++) {
 			fieldNames += playerFields[i].getName() + (i < playerFields.length - 1 ? "\n" : "");
 		}
-		commandSourceStack.sendSuccess(new TextComponent(fieldNames), DEBUG);
+		commandSourceStack.sendSuccess(Component.literal(fieldNames), DEBUG);
 		return 0;
 	}
 
 	private int hasSleepTimer(CommandSourceStack commandSourceStack) {
-		commandSourceStack.sendSuccess(new TextComponent(Boolean.toString(sleepTimerField != null)), DEBUG);
+		commandSourceStack.sendSuccess(Component.literal(Boolean.toString(sleepTimerField != null)), DEBUG);
 		return 0;
 	}
 
 	private int versionOfMod(CommandSourceStack commandSourceStack) {
-		commandSourceStack.sendSuccess(new TextComponent("Realistic Sleep is using method " + config.getSimulationMethod() + "and is on version " + VERSION + "."), true);
+		commandSourceStack.sendSuccess(Component.literal("Realistic Sleep is using method " + config.getSimulationMethod() + "and is on version " + VERSION + "."), true);
 		return 0;
 	}
 

@@ -1,5 +1,5 @@
 modLoader="javafml"
-loaderVersion="[39,)"
+loaderVersion="[41,)"
 license="CoFH Don't Be A Jerk"
 issueTrackerURL="https://github.com/FoxMcloud5655/RealisticSleep/issues"
 [[mods]]
@@ -14,14 +14,14 @@ Realistic Sleep is a mod that adds realistic sleep to Minecraft.  How quaint.
 Instead of setting the current time to morning, this mod instead simulates time passing and actually runs extra tics to make it seem like time actually passed while you were in bed.
 '''
 [[dependencies.realisticsleep]]
-    modId="forge" #mandatory
-    mandatory=true #mandatory
-    versionRange="[39,)"
+    modId="forge"
+    mandatory=true
+    versionRange="[41,)"
     ordering="NONE"
     side="BOTH"
 [[dependencies.realisticsleep]]
     modId="minecraft"
     mandatory=true
-    versionRange="[1.18.1,1.19)"
+    versionRange="[1.19,1.20)"
     ordering="NONE"
     side="BOTH"
