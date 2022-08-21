@@ -38,8 +38,8 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
+import net.minecraftforge.event.TickEvent.LevelTickEvent;
 import net.minecraftforge.event.TickEvent.PlayerTickEvent;
-import net.minecraftforge.event.TickEvent.WorldTickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.LogicalSide;
 import net.minecraftforge.fml.ModLoadingContext;
@@ -104,16 +104,16 @@ public class RealisticSleep {
 	}
 
 	@SubscribeEvent
-	public void onServerTick(WorldTickEvent event) {
+	public void onServerTick(LevelTickEvent event) {
 		// If we aren't in the Overworld or if we're giving the server a break from skipping, just do nothing.
-		if (event.world.dimension() != event.world.OVERWORLD || event.world.isClientSide || event.world.getGameTime() % config.getMaxTicksToWait() != 0 || currentlySkipping || event.world.players().size() == 0) {
+		if (event.level.dimension() != event.level.OVERWORLD || event.level.isClientSide || event.level.getGameTime() % config.getMaxTicksToWait() != 0 || currentlySkipping || event.level.players().size() == 0) {
 			return;
 		}
 
 		// Total amount of ticks passed since last update.
-		long ticksSkipped = event.world.getDayTime() < previousDayTime ? 24000 : 0 + event.world.getDayTime() - previousDayTime;
+		long ticksSkipped = event.level.getDayTime() < previousDayTime ? 24000 : 0 + event.level.getDayTime() - previousDayTime;
 		// Check to see if any player on the server is sleeping.
-		List<ServerPlayer> players = (List<ServerPlayer>) event.world.players();
+		List<ServerPlayer> players = (List<ServerPlayer>) event.level.players();
 		boolean arePlayersSleeping = false;
 		boolean areAllPlayersSleeping = true;
 		for (int i = 0; i < players.size(); i++) {
@@ -128,7 +128,7 @@ public class RealisticSleep {
 		if (!config.isFullTick()) {
 			// Has there been a time skip? If not, then update time tracker and do nothing.
 			if (!config.isTimeSkip(ticksSkipped)) {
-				previousDayTime = event.world.getDayTime();
+				previousDayTime = event.level.getDayTime();
 				return;
 			}
 		}
@@ -147,30 +147,30 @@ public class RealisticSleep {
 		}
 
 		if (areAllPlayersSleeping) {
-			long ticksToSkip = getTicksToSkip(event.world, previousDayTime);
+			long ticksToSkip = getTicksToSkip(event.level, previousDayTime);
 			int ticksToSimulate = (int) (ticksToSkip * 0.25D);
 			// Did the players sleep recently? If so, wake everyone up and reset the time back to what it was.
-			if (!config.canSleep(event.world.getGameTime() - lastSleepTicks)) {
+			if (!config.canSleep(event.level.getGameTime() - lastSleepTicks)) {
 				players.forEach(player -> {
 					if (player.getSleepTimer() > 0) {
 						player.stopSleeping();
 						player.displayClientMessage(Component.literal("You're not that tired after recently sleeping."), true);
 					}
 				});
-				((ServerLevelData)event.world.getLevelData()).setDayTime(previousDayTime);
+				((ServerLevelData)event.level.getLevelData()).setDayTime(previousDayTime);
 				return;
 			}
 			currentlySkipping = true;
 			switch (config.getSimulationMethod()) {
 			case 1:
-				tickTileEntities(ticksToSimulate, event.world); // TODO: Simulate random ticks.
+				tickTileEntities(ticksToSimulate, event.level); // TODO: Simulate random ticks.
 				break;
 			case 2:
-				tickWorld(ticksToSimulate, event.world); // TODO: Simulate random ticks.
+				tickWorld(ticksToSimulate, event.level); // TODO: Simulate random ticks.
 				break;
 			case 3:
-				tickServer(ticksToSimulate, (ServerLevel)event.world);
-				((ServerLevelData)event.world.getLevelData()).setDayTime(previousDayTime + ticksToSkip);
+				tickServer(ticksToSimulate, (ServerLevel)event.level);
+				((ServerLevelData)event.level.getLevelData()).setDayTime(previousDayTime + ticksToSkip);
 				break;
 			default:
 				logError("Invalid configuration.  Please check the config file and use a defined method.");
@@ -193,7 +193,7 @@ public class RealisticSleep {
 				}
 			}
 			if (shouldWakeUp) {
-				lastSleepTicks = event.world.getGameTime();
+				lastSleepTicks = event.level.getGameTime();
 				if (DEBUG) logInfo("Tick simulation complete.");
 				players.forEach(player -> {
 					if (player.getSleepTimer() > 0) {
@@ -202,7 +202,7 @@ public class RealisticSleep {
 				});
 			}
 		}
-		previousDayTime = event.world.getDayTime();
+		previousDayTime = event.level.getDayTime();
 		currentlySkipping = false;
 	}
 
