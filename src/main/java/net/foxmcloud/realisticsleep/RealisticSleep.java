@@ -5,25 +5,31 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.arguments.FloatArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 
-import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.player.AbstractClientPlayer;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.commands.CommandSource;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.TextComponent;
 import net.minecraft.server.level.ChunkHolder;
 import net.minecraft.server.level.ChunkMap;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.food.FoodData;
 import net.minecraft.world.level.Level;
@@ -36,10 +42,9 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
-import net.minecraftforge.event.TickEvent.PlayerTickEvent;
+import net.minecraftforge.event.TickEvent.ClientTickEvent;
 import net.minecraftforge.event.TickEvent.WorldTickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.LogicalSide;
 import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.config.ModConfig.Type;
@@ -57,27 +62,31 @@ public class RealisticSleep {
 	public static final String MODID = "realisticsleep";
 	public static final String MODID_PROPER = "RealisticSleep";
 	public static final String VERSION = "${mod_version}";
-	public static final boolean DEBUG = false;
+	public static final boolean DEBUG = true;
 	public static final Method getLoadedChunksMethod;
 	public static final Method tickBlockEntitiesMethod;
-	public static final Field sleepTimerField;
 	private final RealisticSleepConfig config = new RealisticSleepConfig();
 
-	public long lastSleepTicks = 0;
-	public long previousDayTime = 0;
-	public long previousClientDayTime = 0;
-	public boolean currentlySkipping = false;
+	public static final int ticksToSimulateDivider = 4;
+	
+	public static long lastSleepTicks = 0;
+	public static long previousDayTime = 0;
+	public static long previousClientSleepCounter = 0;
+	public static int durationOfSkip = 0;
+	public static UUID externalWakeUp = null;
 
 	public RealisticSleep() {
+		if (DEBUG) logInfo("Initial mod setup started.");
 		ModLoadingContext.get().registerConfig(Type.SERVER, this.config.getSpec());
 		FMLJavaModLoadingContext.get().getModEventBus().addListener(this::onSetup);
 		MinecraftForge.EVENT_BUS.register(this);
+		RealisticSleepNetwork.init();
+		if (DEBUG) logInfo("Initial mod setup complete.");
 	}
 
 	public void onSetup(FMLCommonSetupEvent event) {
 		if (getLoadedChunksMethod == null) {
 			logError("Chunk reflection unsuccessful.  Method 1 will not work.");
-			return;
 		}
 		else {
 			logInfo("Chunk reflection successful.");
@@ -85,72 +94,69 @@ public class RealisticSleep {
 		}
 		if (tickBlockEntitiesMethod == null) {
 			logError("World reflection unsuccessful.  Method 2 will not work.");
-			return;
 		}
 		else {
 			logInfo("World reflection successful.");
 			tickBlockEntitiesMethod.setAccessible(true);
 		}
-		if (sleepTimerField == null) {
-			logError("Sleep Timer reflection unsuccessful.  Method 3 will not work.");
-			return;
-		}
-		else {
-			logInfo("Sleep Timer reflection successful.");
-			sleepTimerField.setAccessible(true);
-		}
 	}
 
 	@SubscribeEvent
 	public void onServerTick(WorldTickEvent event) {
-		// If we aren't in the Overworld or if we're giving the server a break from skipping, just do nothing.
-		if (event.world.dimension() != event.world.OVERWORLD || event.world.isClientSide || event.world.getGameTime() % config.getMaxTicksToWait() != 0 || currentlySkipping || event.world.players().size() == 0) {
+		if (event.world.isClientSide || event.world.dimension() != event.world.OVERWORLD || event.world.players().size() == 0) {
 			return;
 		}
+		long ticksSkipped = event.world.getDayTime() < previousDayTime ? 24000 : event.world.getDayTime() - previousDayTime;
+		if (ticksSkipped != 1) {
+			previousDayTime = event.world.getDayTime();
+			return;
+		}
+		if (durationOfSkip > 1) {
+			durationOfSkip--;
+			previousDayTime = event.world.getDayTime();
+			return;
+		}
+		if (externalWakeUp != null) {
+			List<ServerPlayer> players = (List<ServerPlayer>) event.world.players();
+			for (int i = 0; i < players.size(); i++) {
+				Player player = players.get(i);
+				if (player.getUUID().compareTo(externalWakeUp) == 0) {
+					player.sleepCounter = 0;
+				}
+			}
+			externalWakeUp = null;
+		}
 
-		// Total amount of ticks passed since last update.
-		long ticksSkipped = event.world.getDayTime() < previousDayTime ? 24000 : 0 + event.world.getDayTime() - previousDayTime;
 		// Check to see if any player on the server is sleeping.
 		List<ServerPlayer> players = (List<ServerPlayer>) event.world.players();
 		boolean arePlayersSleeping = false;
 		boolean areAllPlayersSleeping = true;
 		for (int i = 0; i < players.size(); i++) {
-			if (players.get(i).getSleepTimer() > 95) {
+			if (players.get(i).sleepCounter > 99 - (config.getMaxTicksToSkip() / ticksToSimulateDivider)) {
 				arePlayersSleeping = true;
 			}
 			else {
 				areAllPlayersSleeping = false;
 			}
 		}
-
-		if (!config.isFullTick()) {
-			// Has there been a time skip? If not, then update time tracker and do nothing.
-			if (!config.isTimeSkip(ticksSkipped)) {
-				previousDayTime = event.world.getDayTime();
-				return;
-			}
-		}
-		else if (arePlayersSleeping) {
-			try {
-				for (int i = 0; i < players.size(); i++) {
-					if (sleepTimerField.getInt(players.get(i)) > 95) {
-						sleepTimerField.setInt(players.get(i), 95);
-					}
+		
+		if (arePlayersSleeping && config.isFullTick()) {
+			for (int i = 0; i < players.size(); i++) {
+				if (players.get(i).sleepCounter >= 99 - (config.getMaxTicksToSkip() / ticksToSimulateDivider)) {
+					players.get(i).sleepCounter = 99 - (config.getMaxTicksToSkip() / ticksToSimulateDivider);
 				}
-			}
-			catch (Exception e) {
-				logError("Exception occurred while accessing " + e.getMessage() + ".");
-				return;
 			}
 		}
 
 		if (areAllPlayersSleeping) {
-			long ticksToSkip = getTicksToSkip(event.world, previousDayTime);
-			int ticksToSimulate = (int) (ticksToSkip * 0.25D);
+			if (DEBUG) logInfo("All players sleeping.  Checking if players have slept recently.");
+			long ticksToSkip = getTicksToSkip(event.world);
+			int ticksToSimulate = (int) (ticksToSkip * (1D / ticksToSimulateDivider));
 			// Did the players sleep recently? If so, wake everyone up and reset the time back to what it was.
 			if (!config.canSleep(event.world.getGameTime() - lastSleepTicks)) {
+				if (DEBUG) logInfo("Players have slept recently.  Waking them up to prevent skipping too quickly.");
 				players.forEach(player -> {
-					if (player.getSleepTimer() > 0) {
+					if (player.sleepCounter > 0) {
 						player.stopSleeping();
 						player.displayClientMessage(new TextComponent("You're not that tired after recently sleeping."), true);
 					}
@@ -158,7 +164,7 @@ public class RealisticSleep {
 				((ServerLevelData)event.world.getLevelData()).setDayTime(previousDayTime);
 				return;
 			}
-			currentlySkipping = true;
+			if (DEBUG) logInfo("Good to go.  Running additional ticks.");
 			switch (config.getSimulationMethod()) {
 			case 1:
 				tickTileEntities(ticksToSimulate, event.world); // TODO: Simulate random ticks.
@@ -167,8 +173,11 @@ public class RealisticSleep {
 				tickWorld(ticksToSimulate, event.world); // TODO: Simulate random ticks.
 				break;
 			case 3:
-				tickServer(ticksToSimulate, (ServerLevel)event.world);
-				((ServerLevelData)event.world.getLevelData()).setDayTime(previousDayTime + ticksToSkip);
+				durationOfSkip = config.getMaxTicksToWait();
+				tickServer(ticksToSimulate, ticksToSkip, (ServerLevel)event.world);
+				for (ServerPlayer player : players) {
+					RealisticSleepNetwork.sendTimeUpdate(player, event.world.getDayTime());
+				}
 				break;
 			default:
 				logError("Invalid configuration.  Please check the config file and use a defined method.");
@@ -181,7 +190,7 @@ public class RealisticSleep {
 				ServerPlayer player = (ServerPlayer) players.get(i);
 				if (players.get(i).getSleepTimer() > 0) {
 					tickPotions(player, ticksToSkip);
-					healPlayerFromFood(player, ticksToSimulate / 40);
+					healPlayerFromFood(player, ticksToSimulate / config.getMaxTicksToSkip());
 				}
 			}
 			boolean shouldWakeUp = true;
@@ -190,9 +199,10 @@ public class RealisticSleep {
 					shouldWakeUp = false;
 				}
 			}
+			if (DEBUG) logInfo("Additional ticks ran.");
 			if (shouldWakeUp) {
 				lastSleepTicks = event.world.getGameTime();
-				if (DEBUG) logInfo("Tick simulation complete.");
+				if (DEBUG) logInfo("No need to run any more additional ticks.  Waking up players.");
 				players.forEach(player -> {
 					if (player.getSleepTimer() > 0) {
 						player.stopSleeping();
@@ -200,36 +210,26 @@ public class RealisticSleep {
 				});
 			}
 		}
-		previousDayTime = event.world.getDayTime();
-		currentlySkipping = false;
 	}
-
+	
 	@OnlyIn(Dist.CLIENT)
 	@SubscribeEvent
-	public void onClientPlayerTick(PlayerTickEvent event) {
-		// Client-only processing to make the sky not so jerky and more smooth if in Full Tick mode.
-		if (event.side == LogicalSide.CLIENT) {
-			ClientLevel world = (ClientLevel)event.player.getCommandSenderWorld();
-			List<AbstractClientPlayer> players = world.players(); // All players in range of the player?
-			boolean allPlayersSleeping = true;
-			for (int i = 0; i < players.size(); i++) {
-				if (players.get(i).getSleepTimer() < 95) {
-					allPlayersSleeping = false;
-				}
-			}
-			if (config.isFullTick() && allPlayersSleeping) {
-				world.setDayTime(previousClientDayTime + (getTicksToSkip(world, previousClientDayTime) / config.getMaxTicksToWait()));
-			}
-			previousClientDayTime = world.getDayTime();
+	public void checkPlayerWakeUp(ClientTickEvent event) {
+		LocalPlayer player = Minecraft.getInstance().player;
+		if (player != null && player.sleepCounter + config.getMaxTicksToWait() < previousClientSleepCounter) {
+			RealisticSleepNetwork.sendWakeUp(player.getUUID());
+			previousClientSleepCounter = 0;
+		}
+		if (player != null && player.sleepCounter > previousClientSleepCounter) {
+			previousClientSleepCounter = player.sleepCounter;
 		}
 	}
 
-	@SuppressWarnings("unused")
-	private long getTicksToSkip(Level world, long previousTime) {
-		long ticksSkipped = world.getDayTime() < previousTime ? 24000 : 0 + world.getDayTime() - previousTime;
-		long ticksToSkip = config.isTimeSkip(ticksSkipped) ? ticksSkipped : 24000 - world.getDayTime();
-		if (DEBUG && world instanceof ServerLevel) logInfo("Calculated " + ticksToSkip + " ticks for time skip.");
-		return config.isFullTick() ? Math.min(ticksToSkip, config.getMaxTicksToSkip()) : ticksToSkip;
+	private long getTicksToSkip(Level world) {
+		long maxTicksToSkip = 24000 - world.getDayTime() % 24000;
+		long ticksToSkip = config.isFullTick() ? Math.min(config.getMaxTicksToSkip(), maxTicksToSkip) : maxTicksToSkip;
+		if (DEBUG && world instanceof ServerLevel) logInfo("Calculated " + ticksToSkip + "/" + maxTicksToSkip + " ticks for time skip.");
+		return ticksToSkip;
 	}
 
 	private void tickTileEntities(int ticksToSimulate, Level world) {
@@ -284,15 +284,11 @@ public class RealisticSleep {
 		else logError("World reflection not valid with current setup.");
 	}
 
-	private void tickServer(int ticksToSimulate, ServerLevel world) {
-		try {
-			for (int i = 0; i < ticksToSimulate; i++) {
-				world.tick(() -> true);
-			}
+	private void tickServer(int ticksToSimulate, long ticksToSkip, ServerLevel world) {
+		for (int i = 0; i < ticksToSimulate; i++) {
+			world.tick(() -> false);
 		}
-		catch (Exception e) {
-			logError("Error when ticking world: " + e.getMessage());
-		}
+		((ServerLevelData)world.getLevelData()).setDayTime(previousDayTime + ticksToSkip);
 	}
 
 	public void tickPotions(ServerPlayer player, long ticksElapsed) {
@@ -324,37 +320,94 @@ public class RealisticSleep {
 	public void registerCommandsEvent(RegisterCommandsEvent event) {
 		registerCommand(event.getDispatcher());
 	}
-	
-    public void registerCommand(CommandDispatcher<CommandSourceStack> commandDispatcher) {
-        commandDispatcher.register(
-                Commands.literal("realisticsleep")
-                        .then(Commands.literal("dumpPlayerFields")
-                                .executes(ctx -> dumpPlayerFields(ctx.getSource()))
-                        )
-                        .then(Commands.literal("hasSleepTimer")
-                        		.executes(ctx -> hasSleepTimer(ctx.getSource()))
-                        )
-                        .executes(ctx -> versionOfMod(ctx.getSource()))
-        );
-    }
 
-	private int dumpPlayerFields(CommandSourceStack commandSourceStack) {
+	public void registerCommand(CommandDispatcher<CommandSourceStack> dispatcher) {
+		dispatcher.register(
+			Commands.literal("realisticsleep")
+				.then(Commands.literal("dumpPlayerFields").executes(ctx -> dumpPlayerFields(ctx.getSource()))
+				)
+				.then(Commands.literal("getSleepCounter").executes(this::getSleepCounter)
+					.then(Commands.argument("player", EntityArgument.player()).executes(this::getSleepCounter))
+				)
+				.then(Commands.literal("setHP").executes(this::setHP)
+					.then(Commands.argument("entities", EntityArgument.entities()).executes(this::setHP)
+						.then(Commands.argument("hp", FloatArgumentType.floatArg()).executes(this::setHP)))
+				)
+			.executes(ctx -> versionOfMod(ctx.getSource()))
+		);
+	}
+
+	private int dumpPlayerFields(CommandSourceStack source) {
 		Field[] playerFields = ServerPlayer.class.getSuperclass().getDeclaredFields();
 		String fieldNames = "";
 		for (int i = 0; i < playerFields.length; i++) {
 			fieldNames += playerFields[i].getName() + (i < playerFields.length - 1 ? "\n" : "");
 		}
-		commandSourceStack.sendSuccess(new TextComponent(fieldNames), DEBUG);
+		source.sendSuccess(new TextComponent(fieldNames), false);
 		return 0;
 	}
 
-	private int hasSleepTimer(CommandSourceStack commandSourceStack) {
-		commandSourceStack.sendSuccess(new TextComponent(Boolean.toString(sleepTimerField != null)), DEBUG);
+	private int getSleepCounter(CommandContext<CommandSourceStack> commandContext) throws CommandSyntaxException {
+		Entity entity;
+		try {
+			entity = EntityArgument.getEntity(commandContext, "player");
+		}
+		catch (Exception e) {
+			entity = commandContext.getSource().getEntity();
+		}
+		if (entity != null && entity instanceof Player) {
+			Player player = (Player)entity;
+			commandContext.getSource().sendSuccess(new TextComponent(player.getDisplayName().getString() + " has a sleepCounter of " + player.sleepCounter + ".").withStyle(ChatFormatting.YELLOW), false);
+			return 1;
+		}
+		commandContext.getSource().sendFailure(new TextComponent(entity == null ? "Entity provided (or you, if no another entity wasn't specified) was null, somehow." : "Selected entity is not a player.").withStyle(ChatFormatting.RED));
+		return 0;
+	}
+	
+	private int setHP(CommandContext<CommandSourceStack> commandContext) throws CommandSyntaxException {
+		ArrayList<Entity> entities = new ArrayList<Entity>();
+		float hp = 1;
+		try {
+			EntityArgument.getEntities(commandContext, "entities").forEach(entity -> {
+				entities.add(entity);
+			});;
+		}
+		catch (Exception e) {
+			entities.clear();
+			entities.add(commandContext.getSource().getEntity());
+		}
+		try {
+			hp = FloatArgumentType.getFloat(commandContext, "hp");
+		}
+		catch (Exception e) {}
+		int targetsAffected = 0;
+		String textToSend = "No targets were valid.";
+		if (entities != null && entities.size() > 0) {
+			for (Entity entity : entities) {
+				if (entity instanceof LivingEntity) {
+					targetsAffected++;
+					LivingEntity livingEntity = (LivingEntity)entity;
+					livingEntity.setHealth(hp);
+					textToSend = entity.getDisplayName().getString() + " set to " + livingEntity.getHealth() + " HP.";
+				}
+			}
+			if (targetsAffected == 0) {
+				commandContext.getSource().sendFailure(new TextComponent(textToSend).withStyle(ChatFormatting.RED));
+			}
+			else if (targetsAffected > 1) {
+				commandContext.getSource().sendSuccess(new TextComponent(targetsAffected + " entities set to " + hp + " HP.").withStyle(ChatFormatting.YELLOW), true);
+			}
+			else {
+				commandContext.getSource().sendSuccess(new TextComponent(textToSend).withStyle(ChatFormatting.YELLOW), true);
+			}
+			return targetsAffected;
+		}
+		commandContext.getSource().sendFailure(new TextComponent("No targets selected.").withStyle(ChatFormatting.RED));
 		return 0;
 	}
 
-	private int versionOfMod(CommandSourceStack commandSourceStack) {
-		commandSourceStack.sendSuccess(new TextComponent("Realistic Sleep is using method " + config.getSimulationMethod() + "and is on version " + VERSION + "."), true);
+	private int versionOfMod(CommandSourceStack source) {
+		source.sendSuccess(new TextComponent("Realistic Sleep is using method " + config.getSimulationMethod() + " and is on version " + VERSION + ".").withStyle(ChatFormatting.YELLOW), true);
 		return 0;
 	}
 
@@ -386,19 +439,8 @@ public class RealisticSleep {
 		}
 	}
 
-	private static Field fetchSleepTimerField() {
-		try {
-			return ObfuscationReflectionHelper.findField(Player.class, "sleepCounter");
-		}
-		catch (Exception e) {
-			logError("Exception occurred while accessing sleepTimer: " + e.getMessage());
-			return null;
-		}
-	}
-
 	static {
 		getLoadedChunksMethod = fetchGetLoadedChunksMethod();
 		tickBlockEntitiesMethod = fetchTickBlockEntitiesMethod();
-		sleepTimerField = fetchSleepTimerField();
 	}
 }

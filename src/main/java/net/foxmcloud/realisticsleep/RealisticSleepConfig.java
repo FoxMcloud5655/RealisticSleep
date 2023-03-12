@@ -19,7 +19,6 @@ public class RealisticSleepConfig {
 	private IntValue maxTicksToSkip;
 	private IntValue maxTicksToWait;
 	private LongValue waitTime;
-	private LongValue minTime;
 	private BooleanValue healPlayers;
 	private IntValue healCost;
 	private DoubleValue hungerPerHour;
@@ -35,20 +34,18 @@ public class RealisticSleepConfig {
 		this.method = builder.defineInRange("method", 3, 2, 3);
 		
 		builder.comment("Defines how many ticks to skip forward per tick when using the Full Server Tick method.\n"
-				+ "Must be in increments of 4 (preferrably in increments of 20).");
-		this.maxTicksToSkip = builder.defineInRange("maxTicksToSkip", 40, 4, 100);
+				+ "MUST be in increments of " + RealisticSleep.ticksToSimulateDivider + ".");
+		this.maxTicksToSkip = builder.defineInRange("maxTicksToSkip", 10 * RealisticSleep.ticksToSimulateDivider, RealisticSleep.ticksToSimulateDivider, 25 * RealisticSleep.ticksToSimulateDivider);
 		
-		builder.comment("Defines how many ticks to wait per tick when using the Full Server Tick method.\n"
-				+ "A value of 2 would perform the skip every other tick (not recommended) and a value of 4 will perform a skip every 4th tick.");
-		this.maxTicksToWait = builder.defineInRange("maxTicksToWait", 2, 1, 8);
+		builder.comment("Defines how many ticks to wait for the server to catch up before performing the next skip when using the Full Server Tick method.\n"
+				+ "A value of 2 would perform the skip every other tick and a value of 4 will perform a skip every 4th tick.");
+		this.maxTicksToWait = builder.defineInRange("maxTicksToWait", 2, 2, 8);
 		
 		builder.comment("A blacklist of what TileEntities that the Search and Tick method (method 1) will skip.");
 		this.blacklist = builder.define("blacklist", "minecraft:chest,minecraft:mob_spawner,quark:monster_box,mana-and-artifice:magelight,iceandfire:ghost_chest,minecraft:skull,mana-and-artifice:inscription_table_tile_entity,iceandfire:iaf_lectern,computercraft:speaker,computercraft:computer_advanced,computercraft:computer,mana-and-artifice:slipstream_generator,minecraft:trapped_chest");
 		
 		builder.comment("Waiting time before players are allowed to sleep again and skip time in seconds.");
 		this.waitTime = builder.defineInRange("waitTime", 250L, 5L, 1200L);
-		builder.comment("The minimum amount of time in seconds that must be skipped before it's considered for extra tick processing.");
-		this.minTime = builder.defineInRange("minTime", 10L, 1L, 1200L);
 		
 		builder.comment("Defines if players that are sleeping are healed (if their hunger allows it) after waking up.");
 		this.healPlayers = builder.define("healPlayers", true);
@@ -93,10 +90,6 @@ public class RealisticSleepConfig {
 	
 	public boolean canSleep(long ticksElapsed) {
 		return ticksElapsed >= this.waitTime.get() * 20L;
-	}
-	
-	public boolean isTimeSkip(long ticksSkipped) {
-		return ticksSkipped > (this.minTime.get() * 20L);
 	}
 	
 	public boolean canHeal() {
