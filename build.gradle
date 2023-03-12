@@ -2,10 +2,10 @@ buildscript {
     repositories {
         mavenLocal()
         jcenter()
-        maven { url = "http://files.minecraftforge.net/maven" }
+        maven { url = "https://files.minecraftforge.net/maven" }
     }
     dependencies {
-        classpath 'net.minecraftforge.gradle:ForgeGradle:4.1.+'
+        classpath 'net.minecraftforge.gradle:ForgeGradle:5.1+'
     }
 }
 
@@ -61,11 +61,13 @@ minecraft {
 
 repositories {
     mavenLocal()
+    maven { url = "https://maven.covers1624.net/" }
 }
 
 dependencies {
     minecraft "net.minecraftforge:forge:${config.mc_version}-${config.forge_version}"
     //annotationProcessor("org.spongepowered:mixin:0.8.2:processor")
+    implementation fg.deobf("codechicken:CodeChickenLib:${config.mc_version}-${config.ccl_version}:universal")
 }
 
 processResources { task ->
