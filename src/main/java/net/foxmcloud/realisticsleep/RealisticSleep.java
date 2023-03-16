@@ -5,6 +5,7 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -14,7 +15,9 @@ import com.mojang.brigadier.arguments.FloatArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.player.AbstractClientPlayerEntity;
+import net.minecraft.client.entity.player.ClientPlayerEntity;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.command.CommandSource;
 import net.minecraft.command.Commands;
@@ -40,8 +43,10 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
+import net.minecraftforge.event.TickEvent.ClientTickEvent;
 import net.minecraftforge.event.TickEvent.PlayerTickEvent;
 import net.minecraftforge.event.TickEvent.WorldTickEvent;
+import net.minecraftforge.event.entity.player.PlayerWakeUpEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.LogicalSide;
 import net.minecraftforge.fml.ModLoadingContext;
@@ -70,20 +75,22 @@ public class RealisticSleep {
 	
 	public static long lastSleepTicks = 0;
 	public static long previousDayTime = 0;
-	public static long previousClientDayTime = 0;
+	public static long previousClientSleepCounter = 0;
 	public static int durationOfSkip = 0;
+	public static UUID externalWakeUp = null;
 
 	public RealisticSleep() {
+		if (DEBUG) logInfo("Initial mod setup started.");
 		ModLoadingContext.get().registerConfig(Type.SERVER, this.config.getSpec());
 		FMLJavaModLoadingContext.get().getModEventBus().addListener(this::onSetup);
 		MinecraftForge.EVENT_BUS.register(this);
 		RealisticSleepNetwork.init();
+		if (DEBUG) logInfo("Initial mod setup complete.");
 	}
 
 	public void onSetup(FMLCommonSetupEvent event) {
 		if (getLoadedChunksMethod == null) {
 			logError("Chunk reflection unsuccessful.  Method 1 will not work.");
-			return;
 		}
 		else {
 			logInfo("Chunk reflection successful.");
@@ -91,7 +98,6 @@ public class RealisticSleep {
 		}
 		if (tickBlockEntitiesMethod == null) {
 			logError("World reflection unsuccessful.  Method 2 will not work.");
-			return;
 		}
 		else {
 			logInfo("World reflection successful.");
@@ -105,7 +111,7 @@ public class RealisticSleep {
 			return;
 		}
 		long ticksSkipped = event.world.getDayTime() < previousDayTime ? 24000 : event.world.getDayTime() - previousDayTime;
-		if (ticksSkipped > 1 || ticksSkipped < 1) {
+		if (ticksSkipped != 1) {
 			previousDayTime = event.world.getDayTime();
 			return;
 		}
@@ -114,6 +120,17 @@ public class RealisticSleep {
 			previousDayTime = event.world.getDayTime();
 			return;
 		}
+		if (externalWakeUp != null) {
+			List<ServerPlayerEntity> players = (List<ServerPlayerEntity>) event.world.players();
+			for (int i = 0; i < players.size(); i++) {
+				PlayerEntity player = players.get(i);
+				if (player.getUUID().compareTo(externalWakeUp) == 0) {
+					player.sleepCounter = 0;
+				}
+			}
+			externalWakeUp = null;
+		}
+
 		// Check to see if any player on the server is sleeping.
 		List<ServerPlayerEntity> players = (List<ServerPlayerEntity>) event.world.players();
 		boolean arePlayersSleeping = false;
@@ -136,10 +153,12 @@ public class RealisticSleep {
 		}
 
 		if (areAllPlayersSleeping) {
+			if (DEBUG) logInfo("All players sleeping.  Checking if players have slept recently.");
 			long ticksToSkip = getTicksToSkip(event.world);
 			int ticksToSimulate = (int) (ticksToSkip * (1D / ticksToSimulateDivider));
 			// Did the players sleep recently? If so, wake everyone up and reset the time back to what it was.
 			if (!config.canSleep(event.world.getGameTime() - lastSleepTicks)) {
+				if (DEBUG) logInfo("Players have slept recently.  Waking them up to prevent skipping too quickly.");
 				players.forEach(player -> {
 					if (player.sleepCounter > 0) {
 						player.stopSleeping();
@@ -149,6 +168,7 @@ public class RealisticSleep {
 				((ServerWorldInfo)event.world.getLevelData()).setDayTime(previousDayTime);
 				return;
 			}
+			if (DEBUG) logInfo("Good to go.  Running additional ticks.");
 			switch (config.getSimulationMethod()) {
 			case 1:
 				tickTileEntities(ticksToSimulate, event.world); // TODO: Simulate random ticks.
@@ -183,15 +203,29 @@ public class RealisticSleep {
 					shouldWakeUp = false;
 				}
 			}
+			if (DEBUG) logInfo("Additional ticks ran.");
 			if (shouldWakeUp) {
 				lastSleepTicks = event.world.getGameTime();
-				if (DEBUG) logInfo("Tick simulation complete.");
+				if (DEBUG) logInfo("No need to run any more additional ticks.  Waking up players.");
 				players.forEach(player -> {
 					if (player.getSleepTimer() > 0) {
 						player.stopSleeping();
 					}
 				});
 			}
+		}
+	}
+	
+	@OnlyIn(Dist.CLIENT)
+	@SubscribeEvent
+	public void checkPlayerWakeUp(ClientTickEvent event) {
+		ClientPlayerEntity player = Minecraft.getInstance().player;
+		if (player != null && player.sleepCounter + config.getMaxTicksToWait() < previousClientSleepCounter) {
+			RealisticSleepNetwork.sendWakeUp(player.getUUID());
+			previousClientSleepCounter = 0;
+		}
+		if (player != null && player.sleepCounter > previousClientSleepCounter) {
+			previousClientSleepCounter = player.sleepCounter;
 		}
 	}
 
@@ -391,7 +425,7 @@ public class RealisticSleep {
 
 	private static Method fetchGetLoadedChunksMethod() {
 		try {
-			return ObfuscationReflectionHelper.findMethod(ChunkManager.class, "getChunks");
+			return ObfuscationReflectionHelper.findMethod(ChunkManager.class, "func_223491_f");
 		}
 		catch (Exception e) {
 			logError("Exception occurred while accessing getLoadedChunksIterable: " + e.getMessage());
@@ -401,7 +435,7 @@ public class RealisticSleep {
 
 	private static Method fetchTickBlockEntitiesMethod() {
 		try {
-			return ObfuscationReflectionHelper.findMethod(World.class, "tickBlockEntities");
+			return ObfuscationReflectionHelper.findMethod(World.class, "func_217391_K");
 		}
 		catch (Exception e) {
 			logError("Exception occurred while accessing tickBlockEntities: " + e.getMessage());

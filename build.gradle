@@ -71,6 +71,7 @@ dependencies {
 }
 
 processResources { task ->
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
     inputs.property 'mod_version', config.mod_version
     inputs.property 'mc_version', config.mc_version
 
@@ -78,7 +79,8 @@ processResources { task ->
         spec.include 'META-INF/mods.toml'
         task.doFirst {
             spec.expand 'version': config.mod_version,
-                    'mc_version': config.mc_version
+                'mc_version': config.mc_version,
+                'ccl_version': config.ccl_version
         }
     }
 }
