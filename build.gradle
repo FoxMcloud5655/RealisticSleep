@@ -34,6 +34,7 @@ file('build.properties').withReader {
 
 config.mod_version = "${config.mod_version}.${config.build_number}"
 version = "${config.mc_version}-${config.mod_version}"
+config.forge_version = "${config.forge_major_version}.${config.forge_minor_version}"
 println "Starting build of ${archivesBaseName}, Version: ${config.mod_version}"
 println "Using Forge: ${config.forge_version}, for Minecraft: ${config.mc_version}, with official mappings"
 
@@ -57,10 +58,6 @@ minecraft {
     }
 }
 
-//mixin {
-//    add (sourceSets.main, "mixins.realisticsleep.refmap.json")
-//}
-
 repositories {
     mavenLocal()
     maven { url = "https://maven.covers1624.net/" }
@@ -68,20 +65,17 @@ repositories {
 
 dependencies {
     minecraft "net.minecraftforge:forge:${config.mc_version}-${config.forge_version}"
-    //annotationProcessor("org.spongepowered:mixin:0.8.2:processor")
     implementation fg.deobf("codechicken:CodeChickenLib:${config.mc_version}-${config.ccl_version}:universal")
 }
 
 processResources { task ->
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
-    inputs.property 'mod_version', config.mod_version
-    inputs.property 'mc_version', config.mc_version
-
     from(sourceSets.main.resources.srcDirs) { spec ->
         spec.include 'META-INF/mods.toml'
         task.doFirst {
             spec.expand 'version': config.mod_version,
                 'mc_version': config.mc_version,
+                'forge_major_version': config.forge_major_version,
                 'ccl_version': config.ccl_version
         }
     }
