@@ -66,7 +66,7 @@ public class RealisticSleep {
 	public static final String MODID = "realisticsleep";
 	public static final String MODID_PROPER = "RealisticSleep";
 	public static final String VERSION = "${mod_version}";
-	public static final boolean DEBUG = true;
+	public static final boolean DEBUG = false;
 	public static final Method getLoadedChunksMethod;
 	public static final Method tickBlockEntitiesMethod;
 	private final RealisticSleepConfig config = new RealisticSleepConfig();
