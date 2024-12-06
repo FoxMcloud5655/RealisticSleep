@@ -22,6 +22,7 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ChunkHolder;
 import net.minecraft.server.level.ChunkMap;
@@ -42,6 +43,7 @@ import net.minecraft.world.level.storage.ServerLevelData;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.common.world.ForgeChunkManager;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent.ClientTickEvent;
 import net.minecraftforge.event.TickEvent.LevelTickEvent;
@@ -325,7 +327,7 @@ public class RealisticSleep {
 	public void registerCommand(CommandDispatcher<CommandSourceStack> dispatcher) {
 		dispatcher.register(
 			Commands.literal("realisticsleep")
-				.then(Commands.literal("dumpPlayerFields").executes(ctx -> dumpPlayerFields(ctx.getSource()))
+				.then(Commands.literal("debug").executes(ctx -> debugCommand(ctx.getSource()))
 				)
 				.then(Commands.literal("getSleepCounter").executes(this::getSleepCounter)
 					.then(Commands.argument("player", EntityArgument.player()).executes(this::getSleepCounter))
@@ -338,13 +340,10 @@ public class RealisticSleep {
 		);
 	}
 
-	private int dumpPlayerFields(CommandSourceStack source) {
-		Field[] playerFields = ServerPlayer.class.getSuperclass().getDeclaredFields();
-		String fieldNames = "";
-		for (int i = 0; i < playerFields.length; i++) {
-			fieldNames += playerFields[i].getName() + (i < playerFields.length - 1 ? "\n" : "");
-		}
-		source.sendSuccess(Component.literal(fieldNames), false);
+	private int debugCommand(CommandSourceStack source) {
+		CompoundTag nbt = new CompoundTag();
+		ForgeChunkManager.writeForgeForcedChunks(nbt, null, null);
+		source.sendSuccess(Component.literal(nbt.getAsString()), false);
 		return 0;
 	}
 
