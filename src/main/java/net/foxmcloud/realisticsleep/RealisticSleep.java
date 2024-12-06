@@ -343,7 +343,7 @@ public class RealisticSleep {
 	private int debugCommand(CommandSourceStack source) {
 		CompoundTag nbt = new CompoundTag();
 		ForgeChunkManager.writeForgeForcedChunks(nbt, null, null);
-		source.sendSuccess(Component.literal(nbt.getAsString()), false);
+		source.sendSuccess(() -> Component.literal(nbt.getAsString()), false);
 		return 0;
 	}
 
@@ -357,7 +357,7 @@ public class RealisticSleep {
 		}
 		if (entity != null && entity instanceof Player) {
 			Player player = (Player)entity;
-			commandContext.getSource().sendSuccess(Component.literal(player.getDisplayName().getString() + " has a sleepCounter of " + player.sleepCounter + ".").withStyle(ChatFormatting.YELLOW), false);
+			commandContext.getSource().sendSuccess(() -> Component.literal(player.getDisplayName().getString() + " has a sleepCounter of " + player.sleepCounter + ".").withStyle(ChatFormatting.YELLOW), false);
 			return 1;
 		}
 		commandContext.getSource().sendFailure(Component.literal(entity == null ? "Entity provided (or you, if no another entity wasn't specified) was null, somehow." : "Selected entity is not a player.").withStyle(ChatFormatting.RED));
@@ -380,6 +380,7 @@ public class RealisticSleep {
 			hp = FloatArgumentType.getFloat(commandContext, "hp");
 		}
 		catch (Exception e) {}
+		final float finalHP = hp;
 		int targetsAffected = 0;
 		String textToSend = "No targets were valid.";
 		if (entities != null && entities.size() > 0) {
@@ -391,23 +392,25 @@ public class RealisticSleep {
 					textToSend = entity.getDisplayName().getString() + " set to " + livingEntity.getHealth() + " HP.";
 				}
 			}
-			if (targetsAffected == 0) {
+			final int finalTargetsAffected = targetsAffected;
+			final String finalTextToSend = textToSend;
+			if (finalTargetsAffected == 0) {
 				commandContext.getSource().sendFailure(Component.literal(textToSend).withStyle(ChatFormatting.RED));
 			}
-			else if (targetsAffected > 1) {
-				commandContext.getSource().sendSuccess(Component.literal(targetsAffected + " entities set to " + hp + " HP.").withStyle(ChatFormatting.YELLOW), true);
+			else if (finalTargetsAffected > 1) {
+				commandContext.getSource().sendSuccess(() -> Component.literal(finalTargetsAffected + " entities set to " + finalHP + " HP.").withStyle(ChatFormatting.YELLOW), true);
 			}
 			else {
-				commandContext.getSource().sendSuccess(Component.literal(textToSend).withStyle(ChatFormatting.YELLOW), true);
+				commandContext.getSource().sendSuccess(() -> Component.literal(finalTextToSend).withStyle(ChatFormatting.YELLOW), true);
 			}
-			return targetsAffected;
+			return finalTargetsAffected;
 		}
 		commandContext.getSource().sendFailure(Component.literal("No targets selected.").withStyle(ChatFormatting.RED));
 		return 0;
 	}
 
 	private int versionOfMod(CommandSourceStack source) {
-		source.sendSuccess(Component.literal("Realistic Sleep is using method " + config.getSimulationMethod() + " and is on version " + VERSION + ".").withStyle(ChatFormatting.YELLOW), true);
+		source.sendSuccess(() -> Component.literal("Realistic Sleep is using method " + config.getSimulationMethod() + " and is on version " + VERSION + ".").withStyle(ChatFormatting.YELLOW), true);
 		return 0;
 	}
 

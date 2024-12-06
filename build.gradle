@@ -1,22 +1,8 @@
-buildscript {
-    repositories {
-        mavenLocal()
-        jcenter()
-        maven { url = "https://maven.minecraftforge.net/" }
-        maven { url = "https://repo.spongepowered.org/maven" }
-    }
-    dependencies {
-        classpath 'net.minecraftforge.gradle:ForgeGradle:5.1.+'
-        classpath 'org.spongepowered:mixingradle:0.7-SNAPSHOT'
-    }
-}
-
 plugins {
     id 'java'
+	id 'net.neoforged.gradle' version '[6.0.18,6.2)'
 }
 
-apply plugin: 'net.minecraftforge.gradle'
-apply plugin: 'org.spongepowered.mixin'
 apply plugin: 'eclipse'
 
 group = 'net.foxmcloud.realisticsleep'
@@ -34,9 +20,8 @@ file('build.properties').withReader {
 
 config.mod_version = "${config.mod_version}.${config.build_number}"
 version = "${config.mc_version}-${config.mod_version}"
-config.forge_version = "${config.forge_major_version}.${config.forge_minor_version}"
 println "Starting build of ${archivesBaseName}, Version: ${config.mod_version}"
-println "Using Forge: ${config.forge_version}, for Minecraft: ${config.mc_version}, with official mappings"
+println "Using NeoForge: ${config.neo_version}, for Minecraft: ${config.mc_version}, with official mappings"
 
 minecraft {
     mappings channel: 'official', version: config.mc_version
@@ -45,15 +30,18 @@ minecraft {
         client {
             workingDirectory file('run')
             mods { realisticsleep { source sourceSets.main } }
+			property 'mixin.env.refMapRemappingFile', "${buildDir}/createSrgToMcp/output.srg"
         }
         server {
             workingDirectory file('run')
             mods { realisticsleep { source sourceSets.main } }
+			property 'mixin.env.refMapRemappingFile', "${buildDir}/createSrgToMcp/output.srg"
         }
         data {
             workingDirectory file('run')
             args '--mod', 'realisticsleep', '--all', '--output', file("src/generated/resources")
             mods { realisticsleep { source sourceSets.main } }
+			property 'mixin.env.refMapRemappingFile', "${buildDir}/createSrgToMcp/output.srg"
         }
     }
 }
@@ -64,26 +52,26 @@ repositories {
 }
 
 dependencies {
-    minecraft "net.minecraftforge:forge:${config.mc_version}-${config.forge_version}"
-    implementation fg.deobf("codechicken:CodeChickenLib:${config.mc_version}-${config.ccl_version}:universal")
+    minecraft "net.neoforged:forge:${config.mc_version}-${config.neo_version}"
+    implementation fg.deobf("io.codechicken:CodeChickenLib:${config.mc_version}-${config.ccl_version}:universal")
 }
 
 processResources { task ->
-    duplicatesStrategy = DuplicatesStrategy.INCLUDE
-    from(sourceSets.main.resources.srcDirs) { spec ->
-        spec.include 'META-INF/mods.toml'
-        task.doFirst {
-            spec.expand 'version': config.mod_version,
-                'mc_version': config.mc_version,
-                'forge_major_version': config.forge_major_version,
-                'ccl_version': config.ccl_version
-        }
-    }
+	inputs.property 'mc_version', config.mc_version
+	inputs.property 'mod_version', config.mod_version
+
+	filesMatching('META-INF/mods.toml') {
+		expand 'file': ['jarVersion': config.mod_version],
+			'mc_version': config.mc_version,
+			'neo_version': config.neo_version,
+			'neo_major_version': config.neo_version.split('\\.')[0],
+			'ccl_version': "[${config.ccl_version.replace('.+', '')},${config.ccl_version_max})"
+	}
 }
 
 jar {
     finalizedBy 'reobfJar'
-    classifier = 'universal'
+    archiveClassifier = 'universal'
     from file("LICENSE")
     manifest {
         attributes 'Specification-Title': archivesBaseName
@@ -100,7 +88,7 @@ jar {
 task srcJar(type: Jar) {
     build.dependsOn it
     from sourceSets.main.allSource
-    classifier = 'sources'
+    archiveClassifier = 'sources'
     from file("LICENSE")
 }
 

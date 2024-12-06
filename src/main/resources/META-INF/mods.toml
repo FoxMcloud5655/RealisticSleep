@@ -1,10 +1,10 @@
 modLoader="javafml"
-loaderVersion="[${forge_major_version},)"
+loaderVersion="[${neo_major_version},)"
 license="CoFH Don't Be A Jerk"
 issueTrackerURL="https://github.com/FoxMcloud5655/RealisticSleep"
 [[mods]]
 	modId="realisticsleep"
-	version="${version}"
+	version="${file.jarVersion}"
 	displayName="Realistic Sleep"
 	authors="FoxMcloud5655"
 	description='''
@@ -13,7 +13,7 @@ Realistic Sleep is a mod that adds realistic sleep to Minecraft.  Redundant, eh?
 [[dependencies.realisticsleep]]
 	modId="forge"
 	mandatory=true
-	versionRange="[${forge_major_version},)"
+	versionRange="[${neo_version},)"
 	ordering="NONE"
 	side="BOTH"
 [[dependencies.realisticsleep]]
@@ -25,6 +25,6 @@ Realistic Sleep is a mod that adds realistic sleep to Minecraft.  Redundant, eh?
 [[dependencies.realisticsleep]]
 	modId="codechickenlib"
 	mandatory=true
-	versionRange="[${ccl_version},)"
+	versionRange="${ccl_version}"
 	ordering="AFTER"
 	side="BOTH"
