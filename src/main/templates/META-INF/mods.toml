@@ -4,7 +4,7 @@ license="CoFH Don't Be A Jerk"
 issueTrackerURL="https://github.com/FoxMcloud5655/RealisticSleep"
 [[mods]]
 	modId="realisticsleep"
-	version="${file.jarVersion}"
+	version="${mod_version}"
 	displayName="Realistic Sleep"
 	authors="FoxMcloud5655"
 	description='''

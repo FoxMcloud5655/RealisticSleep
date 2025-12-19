@@ -1,9 +1,13 @@
 plugins {
-    id 'java'
-	id 'net.neoforged.gradle' version '[6.0.18,6.2)'
+	id 'eclipse'
+	id 'java-library'
+	id 'maven-publish'
+	id 'net.neoforged.moddev.legacyforge' version '2.0.91'
 }
 
-apply plugin: 'eclipse'
+tasks.named('wrapper', Wrapper).configure {
+	distributionType = Wrapper.DistributionType.BIN
+}
 
 group = 'net.foxmcloud.realisticsleep'
 archivesBaseName = 'RealisticSleep'
@@ -13,9 +17,15 @@ java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 sourceSets.main.resources.srcDirs += "src/generated/resources"
 
 file('build.properties').withReader {
-    def prop = new Properties()
-    prop.load(it)
-    project.ext.config = new ConfigSlurper().parse prop
+	def prop = new Properties()
+	prop.load(it)
+	project.ext.config = new ConfigSlurper().parse prop
+}
+
+repositories {
+	mavenLocal()
+	maven { url = "https://maven.covers1624.net/" }
+	maven { url = "https://maven.blamejared.com/" }
 }
 
 config.mod_version = "${config.mod_version}.${config.build_number}"
@@ -23,73 +33,89 @@ version = "${config.mc_version}-${config.mod_version}"
 println "Starting build of ${archivesBaseName}, Version: ${config.mod_version}"
 println "Using NeoForge: ${config.neo_version}, for Minecraft: ${config.mc_version}, with official mappings"
 
-minecraft {
-    mappings channel: 'official', version: config.mc_version
-    accessTransformer = file("src/main/resources/META-INF/accesstransformer.cfg")
-    runs {
-        client {
-            workingDirectory file('run')
-            mods { realisticsleep { source sourceSets.main } }
-			property 'mixin.env.refMapRemappingFile', "${buildDir}/createSrgToMcp/output.srg"
-        }
-        server {
-            workingDirectory file('run')
-            mods { realisticsleep { source sourceSets.main } }
-			property 'mixin.env.refMapRemappingFile', "${buildDir}/createSrgToMcp/output.srg"
-        }
-        data {
-            workingDirectory file('run')
-            args '--mod', 'realisticsleep', '--all', '--output', file("src/generated/resources")
-            mods { realisticsleep { source sourceSets.main } }
-			property 'mixin.env.refMapRemappingFile', "${buildDir}/createSrgToMcp/output.srg"
-        }
-    }
-}
+legacyForge {
+	version = config.mc_version + '-' + config.neo_version
+	parchment {
+		mappingsVersion = config.mappings_version
+		minecraftVersion = config.mc_version
+	}
+	runs {
+		client {
+			client()
+			systemProperty 'forge.enabledGameTestNamespaces', archivesBaseName
+		}
 
-repositories {
-    mavenLocal()
-    maven { url = "https://maven.covers1624.net/" }
-}
+		server {
+			server()
+			programArgument '--nogui'
+			systemProperty 'forge.enabledGameTestNamespaces', archivesBaseName
+		}
 
-dependencies {
-    minecraft "net.neoforged:forge:${config.mc_version}-${config.neo_version}"
-    implementation fg.deobf("io.codechicken:CodeChickenLib:${config.mc_version}-${config.ccl_version}:universal")
-}
+		data {
+			data()
+			programArguments.addAll '--mod', archivesBaseName, '--all', '--output', file('src/generated/resources/').getAbsolutePath(), '--existing', file('src/main/resources/').getAbsolutePath()
+		}
 
-processResources { task ->
-	inputs.property 'mc_version', config.mc_version
-	inputs.property 'mod_version', config.mod_version
+		configureEach {
+			systemProperty 'forge.logging.markers', 'REGISTRIES'
+			logLevel = org.slf4j.event.Level.DEBUG
+		}
+	}
 
-	filesMatching('META-INF/mods.toml') {
-		expand 'file': ['jarVersion': config.mod_version],
-			'mc_version': config.mc_version,
-			'neo_version': config.neo_version,
-			'neo_major_version': config.neo_version.split('\\.')[0],
-			'ccl_version': "[${config.ccl_version.replace('.+', '')},${config.ccl_version_max})"
+	mods {
+		"${archivesBaseName}" {
+			sourceSet(sourceSets.main)
+		}
 	}
 }
 
-jar {
-    finalizedBy 'reobfJar'
-    archiveClassifier = 'universal'
-    from file("LICENSE")
-    manifest {
-        attributes 'Specification-Title': archivesBaseName
-        attributes 'Specification-Vendor': 'FoxMcloud5655'
-        attributes 'Specification-Version': "1"
-        attributes 'Implementation-Title': archivesBaseName
-        attributes 'Implementation-Vendor': 'FoxMcloud5655'
-        attributes 'Implementation-Version': version
-        attributes 'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
-        //attributes 'MixinConfigs': 'mixins.realisticsleep.json'
-    }
+sourceSets.main.resources { srcDir 'src/generated/resources' }
+
+configurations {
+	runtimeClasspath.extendsFrom localRuntime
 }
 
-task srcJar(type: Jar) {
-    build.dependsOn it
-    from sourceSets.main.allSource
-    archiveClassifier = 'sources'
-    from file("LICENSE")
+obfuscation {
+	createRemappingConfiguration(configurations.localRuntime)
+}
+
+dependencies {
+	modImplementation "io.codechicken:CodeChickenLib:${config.mc_version}-${config.ccl_version}:universal"
+	modLocalRuntime "mezz.jei:jei-${config.mc_version}-forge:${config.jei_version}"
+}
+
+var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
+	var replaceProperties = [
+		mc_version        : config.mc_version,
+		neo_version       : config.neo_version,
+		neo_major_version : config.neo_version.split('\\.')[0],
+		mod_version       : config.mod_version,
+		ccl_version       : "[${config.ccl_version.replace('.+', '')},${config.ccl_version_max})"
+	]
+	inputs.properties replaceProperties
+	expand replaceProperties
+	from "src/main/templates"
+	into "build/generated/sources/modMetadata"
+}
+
+sourceSets.main.resources.srcDir generateModMetadata
+legacyForge.ideSyncTask generateModMetadata
+
+publishing {
+	publications {
+		register('mavenJava', MavenPublication) {
+			from components.java
+		}
+	}
+	repositories {
+		maven {
+			url "file://${project.projectDir}/repo"
+		}
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	options.encoding = 'UTF-8' // Use the UTF-8 charset for Java compilation
 }
 
 /**
@@ -103,21 +129,21 @@ task srcJar(type: Jar) {
  * @return The version string, '0' if 'errorMissing' is false and nothing was found.
  */
 def resolve(module, chop = true, configuration = 'compile', errorMissing = true) {
-    //Copy and lenient resolve the configuration, Forge cant be resolved at this time so lenient is required.
-    def filtered = configurations.getByName(configuration).copy().incoming.artifactView({ it.lenient = true }).artifacts
-            .findAll { it.id.componentIdentifier.module == module }
-            .collect { it.id.componentIdentifier.version }
-    if (filtered.size() > 1) {
-        println "WARNING: Found ${filtered.size()} Dependencies with ModuleName '${module}' in configuration '${configuration.name}'"
-    }
-    if (errorMissing && filtered.isEmpty()) {
-        throw new RuntimeException("Failed resolve dependency version for '${module}'")
-    }
-    if (filtered.isEmpty()) return "0"
-    def version = filtered.first() as String
-    if (chop) {
-        def idx = version.lastIndexOf('-')
-        return version.substring(idx + 1)
-    }
-    return version
+	//Copy and lenient resolve the configuration, Forge cant be resolved at this time so lenient is required.
+	def filtered = configurations.getByName(configuration).copy().incoming.artifactView({ it.lenient = true }).artifacts
+			.findAll { it.id.componentIdentifier.module == module }
+			.collect { it.id.componentIdentifier.version }
+	if (filtered.size() > 1) {
+		println "WARNING: Found ${filtered.size()} Dependencies with ModuleName '${module}' in configuration '${configuration.name}'"
+	}
+	if (errorMissing && filtered.isEmpty()) {
+		throw new RuntimeException("Failed resolve dependency version for '${module}'")
+	}
+	if (filtered.isEmpty()) return "0"
+	def version = filtered.first() as String
+	if (chop) {
+		def idx = version.lastIndexOf('-')
+		return version.substring(idx + 1)
+	}
+	return version
 }
